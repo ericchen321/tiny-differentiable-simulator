@@ -85,6 +85,7 @@ IF(TDS_USE_LEFT_ASSOCIATIVE_TRANSFORMS)
 ENDIF()
 
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/third_party/bullet3/build_cmake/BulletConfig.cmake)
 if(DEFINED Bullet_DIR)
   message("Finding local Bullet")
   find_package(Bullet CONFIG)
@@ -331,7 +332,7 @@ IF(USE_PAGMO2)
     endif()
 ENDIF()
 
-OPTION(USE_CERES "Use Ceres solver" OFF)
+OPTION(USE_CERES "Use Ceres solver" ON)
 IF(USE_CERES)
     find_package(glog)
     find_package(gflags)
