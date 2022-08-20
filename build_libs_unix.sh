@@ -16,7 +16,7 @@ pushd third_party/bullet3
 mkdir build_cmake
 cd build_cmake
 
-cmake    -DUSE_DOUBLE_PRECISION=ON -DCMAKE_DEBUG_POSTFIX="" -DINSTALL_LIBS=ON -DCMAKE_BUILD_TYPE=Release  -DCMAKE_INSTALL_PREFIX:PATH=local_install  ..
+cmake    -DUSE_DOUBLE_PRECISION=ON -DBUILD_PYBULLET=ON -DCMAKE_DEBUG_POSTFIX="" -DINSTALL_LIBS=ON -DCMAKE_BUILD_TYPE=Release  -DCMAKE_INSTALL_PREFIX:PATH=local_install  ..
 make -j4
 make install
 
