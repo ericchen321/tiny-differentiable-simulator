@@ -1,5 +1,9 @@
 .clangd
 build/
+build_cmake/
+dist/
+*.egg-info/
+__pycache__/
 compile_commands.json
 Dockerfile
 .history
