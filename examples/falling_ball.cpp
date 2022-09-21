@@ -37,10 +37,9 @@ using namespace tds;
 #include "visualizer/opengl/tiny_opengl3_app.h"
 #include "math/tiny/tiny_algebra.hpp"
 
-#ifdef USE_CERES
 #include <ceres/autodiff_cost_function.h>
 #include "math/tiny/ceres_utils.h"
-#endif //USE_CERES
+
 #include <chrono>  // std::chrono::seconds
 #include <thread>  // std::this_thread::sleep_for
 
@@ -192,55 +191,6 @@ typename Algebra::Scalar rollout(typename Algebra::Scalar force_x, typename Alge
   return delta.sqnorm();
 }
 
-// Computes gradient using finite differences
-void grad_finite(double force_x, double force_y, double* cost,
-                 double* d_force_x, double* d_force_y, int steps = 300,
-                 double eps = 1e-5) {
-  *cost = rollout<TinyAlgebra<double, DoubleUtils>>(force_x, force_y, steps);
-  double cx = rollout< TinyAlgebra<double, DoubleUtils>>(force_x + eps, force_y, steps);
-  double cy = rollout< TinyAlgebra<double, DoubleUtils>>(force_x, force_y + eps, steps);
-  *d_force_x = (cx - *cost) / eps;
-  *d_force_y = (cy - *cost) / eps;
-}
-
-// void grad_stan(double force_x, double force_y, double* cost, double*
-// d_force_x,
-//               double* d_force_y, int steps = 300, double eps = 1e-5) {
-//  standouble fx = force_x;
-//  fx.d_ = 1;
-//  standouble fy = force_y;
-//
-//  standouble c = rollout<standouble, StanDoubleUtils>(fx, fy, steps);
-//  *cost = c.val();
-//  *d_force_x = c.tangent();
-//
-//  fx.d_ = 0;
-//  fy.d_ = 1;
-//  c = rollout<standouble, StanDoubleUtils>(fx, fy, steps);
-//  *d_force_y = c.tangent();
-//}
-
-void grad_dual(double force_x, double force_y, double* cost, double* d_force_x,
-               double* d_force_y, int steps = 300, double eps = 1e-5) {
-  typedef TinyDual<double> TinyDual;
-  {
-    TinyDual fx(force_x, 1.);
-    TinyDual fy(force_y, 0.);
-
-    TinyDual c = rollout< TinyAlgebra<TinyDual, TinyDualDoubleUtils>>(fx, fy, steps);
-    *cost = c.real();
-    *d_force_x = c.dual();
-  }
-  {
-    TinyDual fx(force_x, 0.);
-    TinyDual fy(force_y, 1.);
-
-    TinyDual c = rollout< TinyAlgebra<TinyDual, TinyDualDoubleUtils>>(fx, fy, steps);
-    *d_force_y = c.dual();
-  }
-}
-
-#ifdef USE_CERES
 
 struct CeresFunctional {
   int steps{300};
@@ -263,6 +213,7 @@ ceres::AutoDiffCostFunction<CeresFunctional, 1, 2> cost_function(
 double* parameters = new double[2];
 double* gradient = new double[2];
 
+
 void grad_ceres(double force_x, double force_y, double* cost, double* d_force_x,
                 double* d_force_y, int steps = 300) {
   parameters[0] = force_x;
@@ -272,7 +223,7 @@ void grad_ceres(double force_x, double force_y, double* cost, double* d_force_x,
   *d_force_x = gradient[0];
   *d_force_y = gradient[1];
 }
-#endif //USE_CERES
+
 
 int main(int argc, char* argv[]) {
   FileUtils::find_file("sphere2red.urdf", sphere2red);
@@ -289,67 +240,22 @@ int main(int argc, char* argv[]) {
   double init_force_x = 0., init_force_y = 500.;
   int steps = 300;
   rollout< TinyAlgebra<double, DoubleUtils>>(init_force_x, init_force_y, steps, &app);
-
-  {
-    auto start = high_resolution_clock::now();
-    double cost, d_force_x, d_force_y;
-    double learning_rate = 1e2;
-    double force_x = init_force_x, force_y = init_force_y;
-    for (int iter = 0; iter < 50; ++iter) {
-      grad_finite(force_x, force_y, &cost, &d_force_x, &d_force_y, steps);
-      printf("Iteration %02d - cost: %.3f \tforce: [%.2f %2.f]\n", iter, cost,
-             force_x, force_y);
-      force_x -= learning_rate * d_force_x;
-      force_y -= learning_rate * d_force_y;
-    }
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    printf("Finite differences took %ld microseconds.",
-           static_cast<long>(duration.count()));
-    rollout< TinyAlgebra<double, DoubleUtils>>(force_x, force_y, steps, &app);
+  auto start = high_resolution_clock::now();
+  double cost, d_force_x, d_force_y;
+  double learning_rate = 1e2;
+  double force_x = init_force_x, force_y = init_force_y;
+  for (int iter = 0; iter < 50; ++iter) {
+    grad_ceres(force_x, force_y, &cost, &d_force_x, &d_force_y, steps);
+    printf("Iteration %02d - cost: %.3f \tforce: [%.2f %2.f]\n", iter, cost,
+            force_x, force_y);
+    force_x -= learning_rate * d_force_x;
+    force_y -= learning_rate * d_force_y;
   }
-  
-  {
-    auto start = high_resolution_clock::now();
-    double cost, d_force_x, d_force_y;
-    double learning_rate = 1e2;
-    double force_x = init_force_x, force_y = init_force_y;
-    for (int iter = 0; iter < 50; ++iter) {
-      grad_dual(force_x, force_y, &cost, &d_force_x, &d_force_y, steps);
-      printf("Iteration %02d - cost: %.3f \tforce: [%.2f %2.f]\n", iter, cost,
-             force_x, force_y);
-      force_x -= learning_rate * d_force_x;
-      force_y -= learning_rate * d_force_y;
-    }
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    printf("TinyDual took %ld microseconds.",
-           static_cast<long>(duration.count()));
-    rollout< TinyAlgebra<double, DoubleUtils>>(force_x, force_y, steps, &app);
-  }
-  
-
-#ifdef USE_CERES
-  {
-    auto start = high_resolution_clock::now();
-    double cost, d_force_x, d_force_y;
-    double learning_rate = 1e2;
-    double force_x = init_force_x, force_y = init_force_y;
-    for (int iter = 0; iter < 50; ++iter) {
-      grad_ceres(force_x, force_y, &cost, &d_force_x, &d_force_y, steps);
-      printf("Iteration %02d - cost: %.3f \tforce: [%.2f %2.f]\n", iter, cost,
-             force_x, force_y);
-      force_x -= learning_rate * d_force_x;
-      force_y -= learning_rate * d_force_y;
-    }
-    auto stop = high_resolution_clock::now();
-    auto duration = duration_cast<microseconds>(stop - start);
-    printf("Ceres Jet took %ld microseconds.",
-           static_cast<long>(duration.count()));
-    rollout<TinyAlgebra<double, DoubleUtils> >(force_x, force_y, steps, &app);
-  }
-#endif //USE_CERES
-
+  auto stop = high_resolution_clock::now();
+  auto duration = duration_cast<microseconds>(stop - start);
+  printf("Ceres Jet took %ld microseconds.",
+          static_cast<long>(duration.count()));
+  rollout<TinyAlgebra<double, DoubleUtils> >(force_x, force_y, steps, &app);
   
   return 0;
 }

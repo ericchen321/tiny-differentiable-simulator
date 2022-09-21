@@ -99,6 +99,9 @@ if (WIN32)
 else(WIN32)
     target_link_libraries(ceres_estimation_real pybullet_visualizer_api Ceres::ceres)
 
+    # Eric: for my example(s)
+    target_link_libraries(falling_ball Ceres::ceres)
+
 endif (WIN32)
 target_include_directories(ceres_estimation_real PRIVATE ../data/ibm-double-pendulum ../src)
 target_include_directories(ceres_estimation_real PRIVATE ../third_party/bullet3/build_cmake/local_install/include/bullet/)
