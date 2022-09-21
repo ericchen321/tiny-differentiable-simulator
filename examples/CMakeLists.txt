@@ -83,6 +83,10 @@ message("Ceres libs:" ${CERES_LIBRARIES})
 add_executable(ceres_estimation_real ceres_estimation_real.cpp ${TDS_HDRS})
 target_link_libraries(ceres_estimation_real pybullet_visualizer_api  glog::glog Eigen3::Eigen ${CMAKE_DL_LIBS}  )
 
+# Eric: for my example(s)
+add_executable(falling_ball falling_ball.cpp ${TDS_HDRS})
+target_link_libraries(falling_ball pybullet_visualizer_api  glog::glog Eigen3::Eigen ${CMAKE_DL_LIBS}  )
+
 # We want to link against ceres-debug.lib in Debug builds and Release/ceres.lib in optimized/Release builds.
 if (WIN32)
     target_link_libraries(ceres_estimation_real  Opengl32)
@@ -93,9 +97,16 @@ if (WIN32)
 
 else(WIN32)
     target_link_libraries(ceres_estimation_real pybullet_visualizer_api Ceres::ceres)
+
+    # Eric: for my examples
+    target_link_libraries(falling_ball pybullet_visualizer_api Ceres::ceres)
 endif (WIN32)
 target_include_directories(ceres_estimation_real PRIVATE ../data/ibm-double-pendulum ../src)
 target_include_directories(ceres_estimation_real PRIVATE ../third_party/bullet3/build_cmake/local_install/include/bullet/)
+
+# Eric: for my examples
+target_include_directories(falling_ball PRIVATE ../data/ibm-double-pendulum ../src)
+target_include_directories(falling_ball PRIVATE ../third_party/bullet3/build_cmake/local_install/include/bullet/)
 
 IF(APPLE)
   FIND_PACKAGE(OpenGL)
