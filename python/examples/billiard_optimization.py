@@ -6,7 +6,7 @@
 
 import pytinyopengl3 as p
 
-use_auto_diff = False
+use_auto_diff = True
 if use_auto_diff:
   import pytinydiffsim_dual as dp
 else:
@@ -16,7 +16,16 @@ import copy
 
 import math, time
 
+import matplotlib
+import matplotlib.pyplot as plt
+
+
 def rollout(force_x, force_y, step, render):
+  r"""
+  Guanxiong: define the simulation scenario; simulate up to the given `step`;
+  compute the loss as the squared Euclidean distance between the red ball's
+  final position and the target position.
+  """
 
   if render:
     app.renderer.remove_all_instances()
@@ -24,10 +33,11 @@ def rollout(force_x, force_y, step, render):
   bodies = []
   visuals=[]
 
+  # define simulation scenario
   dt = dp.fraction(1, 60)
   gravity_z = dp.fraction(0,1)
   world = dp.TinyWorld()
-  world.gravity = dp.Vector3(dp.fraction(0,1),dp.fraction(0,1),dp.fraction(0,1))
+  world.gravity = dp.Vector3(dp.fraction(0,1),dp.fraction(0,1),gravity_z)
     
   radius = dp.fraction(1,2)
   mass = dp.fraction(1,1)
@@ -38,11 +48,13 @@ def rollout(force_x, force_y, step, render):
   rx = dp.fraction(0,1)
   y = dp.fraction(0,1)
   
+  # set up target position and create the fictitious blue ball
   target_pos = dp.Vector3(dp.fraction(35, 10),dp.fraction(8, 1), dp.fraction(0,1))
   ball_id = 0
   target_id = 5
   rebuild = True
   if render:
+    # render the fictitious blue ball
     orn = p.TinyQuaternionf(0.,0.,0.,1.)
     pos = p.TinyVector3f(dp.get_debug_double(target_pos[0]),dp.get_debug_double(target_pos[1]),dp.get_debug_double(target_pos[2]))
     color = p.TinyVector3f(0,0,1)
@@ -52,7 +64,7 @@ def rollout(force_x, force_y, step, render):
     shape = app.register_graphics_unit_sphere_shape(p.EnumSphereLevelOfDetail.SPHERE_LOD_HIGH, textureIndex)
     sphere_id = app.renderer.register_graphics_instance(shape, pos, orn, color, scaling, opacity, rebuild)
     
-  
+  # create the red ball and the green balls
   geoms = []
   for column in [1,2,3]:
     x = dp.copy(rx)
@@ -70,9 +82,11 @@ def rollout(force_x, force_y, step, render):
                              dp.get_debug_double(body.world_pose.position[1]),
                              dp.get_debug_double(body.world_pose.position[2]))
         if ball_id == target_id:
+          # the red ball
           color = p.TinyVector3f(1,0,0)
         else:
-          color = p.TinyVector3f(1,1,1)
+          # the green balls
+          color = p.TinyVector3f(0,1,0)
         opacity = 1
         scaling = p.TinyVector3f(dp.get_debug_double(radius),dp.get_debug_double(radius),dp.get_debug_double(radius))
         textureIndex = -1
@@ -115,6 +129,8 @@ def rollout(force_x, force_y, step, render):
   if render:
     app.renderer.write_transforms()
   #world.step(dt)
+  
+  # do timestepping
   for iter in range(step):
     
     for b in bodies:
@@ -160,6 +176,9 @@ def rollout(force_x, force_y, step, render):
   return cost
 
 def grad_finite(force_x, force_y, steps = 300, eps = dp.fraction(1,10000)):
+  r"""
+  Guanxiong: compute gradient of loss wrt parameters with finite difference.
+  """
   cost = rollout(force_x, force_y, steps, False)
   cx = rollout(force_x + eps, force_y, steps, False)
   cy = rollout(force_x, force_y + eps, steps, False)
@@ -169,6 +188,9 @@ def grad_finite(force_x, force_y, steps = 300, eps = dp.fraction(1,10000)):
 
 
 def grad_dual(force_x, force_y, steps = 300, eps = dp.fraction(1,10000)):
+  r"""
+  Guanxiong: compute gradient of loss wrt parameters with auto diff.
+  """
   
   fx = dp.TinyDualDouble(force_x.real(), 1.)
   fy = dp.TinyDualDouble(force_y.real(), 0.)
@@ -200,16 +222,18 @@ if render:
   app.renderer.set_camera(cam)
 
 
+# do a rollout before optimization;
+# initialize parameters and hyperparameters
 init_force_x = dp.fraction(0,1)
 init_force_y = dp.fraction(500,1)
 steps = 300
-#do a rollout before optimization
 rollout(init_force_x, init_force_y, steps, render)
-
 learning_rate = dp.fraction(100,1)
 force_x = init_force_x
 force_y = init_force_y
-#gradient descent using gradients
+
+#Guanxiong: do gradient descent
+losses = []
 for iter in range (50):
       if use_auto_diff:
         cost, d_force_x, d_force_y = grad_dual(force_x, force_y, steps)
@@ -217,10 +241,26 @@ for iter in range (50):
         cost, d_force_x, d_force_y = grad_finite(force_x, force_y, steps)
       
       print("Iteration:", iter, " cost:", cost,"force_x:", force_x, "force_y:",force_y)
+      losses.append(cost)
       force_x -= learning_rate * d_force_x
       force_y -= learning_rate * d_force_y
 
-#do a rollout after optimization
+# do a rollout after optimization
 rollout(force_x, force_y, steps, render)
+
+# plot loss
+matplotlib.rcParams['figure.dpi'] = 300
+dpi = matplotlib.rcParams['figure.dpi']
+figsize = 2000 / float(dpi), 1000 / float(dpi)
+fig, ax = plt.subplots(figsize=figsize)
+ax.plot(list(range(len(losses))), losses)
+ax.set_xlabel("Training Step")
+ax.set_ylabel("Loss")
+fig.suptitle(f"Loss vs Training Step")
+plt.subplots_adjust(
+    top = 0.9, bottom = 0.15, right = 0.9, left = 0.15, hspace = 0, wspace = 0)
+plt.savefig(
+    f"billiard_optimization_loss.png")
+plt.close(fig)
 
 
